@@ -2,6 +2,10 @@
 # Instituto de Informática e Estatística
 # Universidade Federal de Santa Catarina
 
+# Inserção do algoritmo GRASP 
+# @author: Valesca Moura
+# UFF - Pesquisa Operacional - 2022.1
+
 using Statistics
 using Random
 
@@ -49,7 +53,7 @@ function get_edges(route)
 end
 
 
-function generate_output(id, route, filename="submission.csv")
+function generate_output(id, route, filename="submission2.csv")
     edges = get_edges(route)
     line = ""
     if !isfile(filename)
@@ -299,7 +303,7 @@ end
 
 function hill_climbing_perturbation(route, M)    
     route = hill_climbing(route, M, true)
-    #print("Best after hill_climbing = $(get_value(route, M))\n")
+    # print("Best after hill_climbing = $(get_value(route, M))\n")
     best_value = get_value(route, M)
     max_iter = 2500
     n = length(route)
@@ -309,10 +313,10 @@ function hill_climbing_perturbation(route, M)
         cand = hill_climbing(cand, M, false)
         cand_value = get_value(cand, M)
         if cand_value < best_value
-            #println("Found best after $iter iterations = $cand_value")
+            # println("Found best after $iter iterations = $cand_value")
             route = hill_climbing(cand, M, true)
             best_value = get_value(route, M)
-            #println("Intensification with 3-opt leads to $best_value")            
+            # println("Intensification with 3-opt leads to $best_value")            
             iter = 0
         end
         iter += 1
@@ -321,26 +325,80 @@ function hill_climbing_perturbation(route, M)
 end
 
 
+function nearest_neighbor(distmat, num_cities, alpha)
+    first_city = rand(1:num_cities)
+    solution = [first_city]
+    num_candidates = round(num_cities * alpha)
+
+    while length(solution) < num_cities
+        actual_city = solution[end]
+        infinity = 0
+        for i in 1:num_cities
+            infinity = infinity + distmat[i]
+        end
+
+        candidates_list = []
+        #println("lenght solution = $(length(solution))")
+        while length(candidates_list) < num_candidates
+            #println("num candidates = $(num_candidates)")
+            #println("lenght candidates = $(length(candidates_list))")
+            value, new_nearest_neighbor = findmin(distmat[actual_city, :])
+            distmat[actual_city, new_nearest_neighbor] = infinity
+            #println(distmat[actual_city,:])
+            #println("min = $(value)")
+            #println(candidates_list)
+            #println("candidate = $(new_nearest_neighbor)")
+            
+            if actual_city != new_nearest_neighbor && (new_nearest_neighbor in solution) == false
+                append!(candidates_list, new_nearest_neighbor)
+            end
+        end
+        append!(solution, candidates_list[rand(1:length(candidates_list))])
+
+        if length(solution) > num_cities / 2
+            num_candidates = 1
+        end
+    end
+    solution
+end
+
+
+function grasp(dist_matrix, num_cities, max_iter = 10)
+    solution = collect(1:num_cities)
+    for i in 0:max_iter
+        best_value = get_value(solution, dist_matrix)
+        construction = nearest_neighbor(deepcopy(dist_matrix), num_cities, 0.05)
+        local_search = hill_climbing(construction, dist_matrix, true)
+        if get_value(local_search, dist_matrix) < best_value
+            solution = local_search
+        end
+    end
+    solution
+end
+
+
 function resolve_instance(len, M)
-    route = collect(1:len)
+    route = grasp(M, len, 5)
     route = hill_climbing_perturbation(route, M)
     route
 end
 
 
 function main()
-    filename = "output_orig.csv"
+    filename = "output.csv"
     line = "Instance ID, Best solution, Time (s)\n"
     open(filename, "a+") do fd
         write(fd, line)
     end
-    for id in 0:10
+    for id in 0:10 
         print("Solving instance $id...\n")
-        xs, ys = get_inst(id) 
+        xs, ys = get_inst(id)
+        println("num cities instance id $id = $(length(xs))") 
         M = get_dist_matrix(xs, ys)
         route, time, _, _, _ = @timed resolve_instance(length(xs), M)
         best_value = get_value(route, M)
         println("Best value for instance $id = $best_value - $time seconds")
+
         line = "$id, $best_value, $time\n"
         open(filename, "a+") do fd
             write(fd, line)
